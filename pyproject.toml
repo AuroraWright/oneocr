@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oneocr"
+version = "1.0.3"
+description = "Snipping Tool OCR for Windows"
+readme = "README.md"
+requires-python = ">=3"
+authors = [
+    {name = "Aurora Wright", email = "fallingluma@gmail.com"},
+    {name = "Cecilia-pj"},
+    {name = "b1tg"},
+]
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+]
+dependencies = [
+    "Pillow",
+]
+
+[project.optional-dependencies]
+api = ["fastapi", "uvicorn"]
+cv2 = ["opencv-python"]
+all = ["fastapi", "uvicorn", "opencv-python"]
+
+[project.urls]
+Homepage = "https://github.com/AuroraWright/oneocr"
+
+[project.scripts]
+oneocr_serve = "oneocr:serve"
