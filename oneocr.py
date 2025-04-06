@@ -234,11 +234,10 @@ class OcrEngine:
             'Line count retrieval failed'
         )
 
-        text_angle = self._get_text_angle(instance)
         lines = self._get_lines(instance, line_count)
         return {
             'text': '\n'.join(line['text'] for line in lines),
-            'text_angle': text_angle,
+            'text_angle': self._get_text_angle(instance),
             'lines': lines
         }
 
