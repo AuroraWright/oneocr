@@ -39,7 +39,7 @@ BoundingBox_p = POINTER(BoundingBox)
 DLL_FUNCTIONS = [
     ('CreateOcrInitOptions', [c_int64_p], c_int64),
     ('OcrInitOptionsSetUseModelDelayLoad', [c_int64, c_char], c_int64),
-    ('CreateOcrPipeline', [c_int64, c_int64, c_int64, c_int64_p], c_int64),
+    ('CreateOcrPipeline', [c_char_p, c_char_p, c_int64, c_int64_p], c_int64),
     ('CreateOcrProcessOptions', [c_int64_p], c_int64),
     ('OcrProcessOptionsSetMaxRecognitionLineCount', [c_int64, c_int64], c_int64),
     ('RunOcrPipeline', [c_int64, POINTER(ImageStructure), c_int64, c_int64_p], c_int64),
@@ -53,7 +53,12 @@ DLL_FUNCTIONS = [
     ('GetOcrWord', [c_int64, c_int64, c_int64_p], c_int64),
     ('GetOcrWordContent', [c_int64, POINTER(c_char_p)], c_int64),
     ('GetOcrWordBoundingBox', [c_int64, POINTER(BoundingBox_p)], c_int64),
-    ('GetOcrWordConfidence', [c_int64, c_float_p], c_int64)
+    ('GetOcrWordConfidence', [c_int64, c_float_p], c_int64),
+
+    ('ReleaseOcrResult', [c_int64], None),
+    ('ReleaseOcrInitOptions', [c_int64], None),
+    ('ReleaseOcrPipeline', [c_int64], None),
+    ('ReleaseOcrProcessOptions', [c_int64], None)
 ]
 
 def bind_dll_functions(dll, functions):
@@ -100,6 +105,11 @@ class OcrEngine:
         self._create_pipeline()
         self._configure_processing()
 
+    def __del__(self):
+        ocr_dll.ReleaseOcrProcessOptions(self.process_options)
+        ocr_dll.ReleaseOcrPipeline(self.pipeline)
+        ocr_dll.ReleaseOcrInitOptions(self.ctx)
+
     def _init_ocr_environment(self):
         '''Initialize OCR context and configuration'''
         self.ctx = c_int64()
@@ -123,8 +133,8 @@ class OcrEngine:
         with suppress_output():
             self._check_dll_result(
                 ocr_dll.CreateOcrPipeline(
-                    ctypes.addressof(model_buf),
-                    ctypes.addressof(key_buf),
+                    model_buf,
+                    key_buf,
                     self.ctx,
                     byref(self.pipeline)
                 ),
@@ -201,18 +211,20 @@ class OcrEngine:
 
     def _perform_ocr(self, image_struct):
         '''Execute OCR pipeline and parse results'''
-        instance = c_int64()
+        result = c_int64()
         self._check_dll_result(
             ocr_dll.RunOcrPipeline(
                 self.pipeline,
                 byref(image_struct),
                 self.process_options,
-                byref(instance)
+                byref(result)
             ),
             'OCR processing failed'
         )
 
-        return self._parse_ocr_results(instance)
+        parsed_result = self._parse_ocr_results(result)
+        ocr_dll.ReleaseOcrResult(result)
+        return parsed_result
 
     def _parse_ocr_results(self, instance):
         '''Extract and format OCR results from DLL'''
