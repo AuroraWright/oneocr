@@ -101,59 +101,59 @@ def suppress_output():
 
 class OcrEngine:    
     def __init__(self):
-        self._init_ocr_environment()
-        self._create_pipeline()
-        self._configure_processing()
+        self.ocr_init_options = self._create_ocr_init_options()
+        self.pipeline = self._create_pipeline()
+        self.process_options = self._create_process_options()
 
     def __del__(self):
         ocr_dll.ReleaseOcrProcessOptions(self.process_options)
         ocr_dll.ReleaseOcrPipeline(self.pipeline)
-        ocr_dll.ReleaseOcrInitOptions(self.ctx)
+        ocr_dll.ReleaseOcrInitOptions(self.ocr_init_options)
 
-    def _init_ocr_environment(self):
-        '''Initialize OCR context and configuration'''
-        self.ctx = c_int64()
+    def _create_ocr_init_options(self):
+        ocr_init_options = c_int64()
         self._check_dll_result(
-            ocr_dll.CreateOcrInitOptions(byref(self.ctx)),
+            ocr_dll.CreateOcrInitOptions(byref(ocr_init_options)),
             'Init options creation failed'
         )
         
         self._check_dll_result(
-            ocr_dll.OcrInitOptionsSetUseModelDelayLoad(self.ctx, 0),
+            ocr_dll.OcrInitOptionsSetUseModelDelayLoad(ocr_init_options, 0),
             'Model loading config failed'
         )
+        return ocr_init_options
 
     def _create_pipeline(self):
-        '''Create OCR processing pipeline'''
         model_path = os.path.join(CONFIG_DIR, MODEL_NAME)
         model_buf = ctypes.create_string_buffer(model_path.encode())
         key_buf = ctypes.create_string_buffer(MODEL_KEY)
 
-        self.pipeline = c_int64()
+        pipeline = c_int64()
         with suppress_output():
             self._check_dll_result(
                 ocr_dll.CreateOcrPipeline(
                     model_buf,
                     key_buf,
-                    self.ctx,
-                    byref(self.pipeline)
+                    self.ocr_init_options,
+                    byref(pipeline)
                 ),
                 'Pipeline creation failed'
             )
+        return pipeline
 
-    def _configure_processing(self):
-        '''Configure processing parameters'''
-        self.process_options = c_int64()
+    def _create_process_options(self):
+        process_options = c_int64()
         self._check_dll_result(
-            ocr_dll.CreateOcrProcessOptions(byref(self.process_options)),
+            ocr_dll.CreateOcrProcessOptions(byref(process_options)),
             'Process options creation failed'
         )
         
         self._check_dll_result(
             ocr_dll.OcrProcessOptionsSetMaxRecognitionLineCount(
-                self.process_options, 1000),
+                process_options, 1000),
             'Line count config failed'
         )
+        return process_options
 
     def recognize_pil(self, image):
         '''Process PIL Image object'''
@@ -192,7 +192,7 @@ class OcrEngine:
         )
 
     def _process_image(self, cols, rows, step, data):
-        '''Common image processing logic'''
+        '''Create image structure'''
         if isinstance(data, bytes):
             data_ptr = (c_ubyte * len(data)).from_buffer_copy(data)
         else:
@@ -211,51 +211,51 @@ class OcrEngine:
 
     def _perform_ocr(self, image_struct):
         '''Execute OCR pipeline and parse results'''
-        result = c_int64()
+        ocr_result = c_int64()
         self._check_dll_result(
             ocr_dll.RunOcrPipeline(
                 self.pipeline,
                 byref(image_struct),
                 self.process_options,
-                byref(result)
+                byref(ocr_result)
             ),
             'OCR processing failed'
         )
 
-        parsed_result = self._parse_ocr_results(result)
-        ocr_dll.ReleaseOcrResult(result)
+        parsed_result = self._parse_ocr_results(ocr_result)
+        ocr_dll.ReleaseOcrResult(ocr_result)
         return parsed_result
 
-    def _parse_ocr_results(self, instance):
+    def _parse_ocr_results(self, ocr_result):
         '''Extract and format OCR results from DLL'''
         line_count = c_int64()
         self._check_dll_result(
-            ocr_dll.GetOcrLineCount(instance, byref(line_count)),
+            ocr_dll.GetOcrLineCount(ocr_result, byref(line_count)),
             'Line count retrieval failed'
         )
 
-        lines = self._get_lines(instance, line_count)
+        lines = self._get_lines(ocr_result, line_count)
         return {
             'text': '\n'.join(line['text'] for line in lines),
-            'text_angle': self._get_text_angle(instance),
+            'text_angle': self._get_text_angle(ocr_result),
             'lines': lines
         }
 
-    def _get_text_angle(self, instance):
+    def _get_text_angle(self, ocr_result):
         '''Extract text angle'''
         text_angle = c_float()
-        if ocr_dll.GetImageAngle(instance, byref(text_angle)) != 0:
+        if ocr_dll.GetImageAngle(ocr_result, byref(text_angle)) != 0:
             return 0.0
         return text_angle.value
 
-    def _get_lines(self, instance, line_count):
+    def _get_lines(self, ocr_result, line_count):
         '''Extract individual text lines'''
-        return [self._process_line(instance, idx) for idx in range(line_count.value)]
+        return [self._process_line(ocr_result, idx) for idx in range(line_count.value)]
 
-    def _process_line(self, instance, line_index):
+    def _process_line(self, ocr_result, line_index):
         '''Process a single text line'''
         line_handle = c_int64()
-        if ocr_dll.GetOcrLine(instance, line_index, byref(line_handle)) != 0:
+        if ocr_dll.GetOcrLine(ocr_result, line_index, byref(line_handle)) != 0:
             return {}
 
         return {
