@@ -31,7 +31,11 @@ class BoundingBox(Structure):
         ('x1', c_float),
         ('y1', c_float),
         ('x2', c_float),
-        ('y2', c_float)
+        ('y2', c_float),
+        ('x3', c_float),
+        ('y3', c_float),
+        ('x4', c_float),
+        ('y4', c_float)
     ]
 
 BoundingBox_p = POINTER(BoundingBox)
@@ -264,7 +268,7 @@ class OcrEngine:
             }
 
         return {
-            'text': self._get_line_text(line_handle),
+            'text': self._get_text(line_handle, ocr_dll.GetOcrLineContent),
             'bounding_rect': self._get_bounding_box(line_handle, ocr_dll.GetOcrLineBoundingBox),
             'words': self._get_words(line_handle)
         }
@@ -288,34 +292,20 @@ class OcrEngine:
             }
 
         return {
-            'text': self._get_word_text(word_handle),
+            'text': self._get_text(word_handle, ocr_dll.GetOcrWordContent),
             'bounding_rect': self._get_bounding_box(word_handle, ocr_dll.GetOcrWordBoundingBox),
             'confidence': self._get_word_confidence(word_handle)
         }
 
-    def _get_line_text(self, line_handle):
-        '''Extract text content from line handle'''
+    def _get_text(self, handle, text_function):
+        '''Extract text content from handle'''
         content = c_char_p()
-        if ocr_dll.GetOcrLineContent(line_handle, byref(content)) == 0:
+        if text_function(handle, byref(content)) == 0:
             return content.value.decode('utf-8', errors='ignore')
-        return None
-
-    def _get_word_text(self, word_handle):
-        '''Extract text content from word handle'''
-        content = c_char_p()
-        if ocr_dll.GetOcrWordContent(word_handle, byref(content)) == 0:
-            return content.value.decode('utf-8', errors='ignore')
-        return None
-
-    def _get_word_confidence(self, word_handle):
-        '''Extract confidence value from word handle'''
-        confidence = c_float()
-        if ocr_dll.GetOcrWordConfidence(word_handle, byref(confidence)) == 0:
-            return confidence.value
         return None
 
     def _get_bounding_box(self, handle, bbox_function):
-        '''Generic bounding box extraction'''
+        '''Extract bounding box from handle'''
         bbox_ptr = BoundingBox_p()
         if bbox_function(handle, byref(bbox_ptr)) == 0 and bbox_ptr:
             bbox = bbox_ptr.contents
@@ -323,8 +313,19 @@ class OcrEngine:
                 'x1': bbox.x1,
                 'y1': bbox.y1,
                 'x2': bbox.x2,
-                'y2': bbox.y2
+                'y2': bbox.y2,
+                'x3': bbox.x3,
+                'y3': bbox.y3,
+                'x4': bbox.x4,
+                'y4': bbox.y4
             }
+        return None
+
+    def _get_word_confidence(self, word_handle):
+        '''Extract confidence value from word handle'''
+        confidence = c_float()
+        if ocr_dll.GetOcrWordConfidence(word_handle, byref(confidence)) == 0:
+            return confidence.value
         return None
 
     def _check_dll_result(self, result_code, error_message):
