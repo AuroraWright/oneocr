@@ -1,5 +1,4 @@
 import ctypes
-import sys
 import os
 import copy
 from ctypes import Structure, byref, POINTER, c_int64, c_int32, c_float, c_ubyte, c_char, c_char_p
@@ -68,18 +67,14 @@ DLL_FUNCTIONS = [
 
 @contextmanager
 def suppress_output():
-    '''Suppress stdout/stderr'''
+    '''Suppress stderr'''
     devnull = os.open(os.devnull, os.O_WRONLY)
-    original_stdout = os.dup(1)
     original_stderr = os.dup(2)
-    os.dup2(devnull, 1)
     os.dup2(devnull, 2)
     try:
         yield
     finally:
-        os.dup2(original_stdout, 1)
         os.dup2(original_stderr, 2)
-        os.close(original_stdout)
         os.close(original_stderr)
         os.close(devnull)
 
@@ -144,16 +139,15 @@ class OcrEngine:
         key_buf = ctypes.create_string_buffer(MODEL_KEY)
 
         pipeline = c_int64()
-        with suppress_output():
-            self._check_dll_result(
-                self.ocr_dll.CreateOcrPipeline(
-                    model_buf,
-                    key_buf,
-                    self.init_options,
-                    byref(pipeline)
-                ),
-                'Pipeline creation failed'
-            )
+        self._check_dll_result(
+            self.ocr_dll.CreateOcrPipeline(
+                model_buf,
+                key_buf,
+                self.init_options,
+                byref(pipeline)
+            ),
+            'Pipeline creation failed'
+        )
         return pipeline
 
     def _create_process_options(self):
@@ -375,7 +369,8 @@ def serve():
         allow_headers=['*']
     )
 
-    ocr_processor = OcrEngine()
+    with suppress_output():
+        ocr_processor = OcrEngine()
 
     @app.post('/')
     async def process_image(request: Request):
